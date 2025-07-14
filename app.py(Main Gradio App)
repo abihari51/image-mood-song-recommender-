@@ -1,0 +1,61 @@
+import gradio as gr
+from PIL import Image
+from transformers import CLIPProcessor, CLIPModel
+import torch
+import random
+from urllib.parse import urlparse, parse_qs
+
+# Load model and processor
+clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+# Define moods and corresponding song recommendations
+moods = ["happy", "sad", "chill", "dark", "energetic", "lonely", "calm"]
+famous_songs = {
+    "happy": [("Happy - Pharrell Williams", "https://www.youtube.com/watch?v=ZbZSe6N_BXs")],
+    "sad": [("Let Her Go - Passenger", "https://www.youtube.com/watch?v=RBumgq5yVrA")],
+    "chill": [("Sunflower - Post Malone", "https://www.youtube.com/watch?v=ApXoWvfEYVU")],
+    "dark": [("Lose Yourself - Eminem", "https://www.youtube.com/watch?v=_Yhyp-_hX2s")],
+    "energetic": [("Believer - Imagine Dragons", "https://www.youtube.com/watch?v=7wtfhZwyrcc")],
+    "lonely": [("See You Again - Wiz Khalifa", "https://www.youtube.com/watch?v=RgKAFK5djSk")],
+    "calm": [("Fix You - Coldplay", "https://www.youtube.com/watch?v=k4V3Mo61fJM")]
+}
+
+# Function to extract video ID
+def extract_video_id(url):
+    parsed_url = urlparse(url)
+    if 'youtu.be' in parsed_url.netloc:
+        return parsed_url.path[1:]
+    if 'youtube.com' in parsed_url.netloc:
+        return parse_qs(parsed_url.query).get('v', [''])[0]
+    return ''
+
+# Main function
+def predict_mood_and_recommend_song(image):
+    image = image.convert("RGB")
+    inputs = clip_processor(text=moods, images=image, return_tensors="pt", padding=True)
+    outputs = clip_model(**inputs)
+    probs = outputs.logits_per_image.softmax(dim=1)
+    predicted_mood_index = probs.argmax().item()
+    predicted_mood = moods[predicted_mood_index]
+
+    song_title, song_url = random.choice(famous_songs[predicted_mood])
+    video_id = extract_video_id(song_url)
+
+    html_output = f"""
+    ### 🎵 Predicted Mood: {predicted_mood.capitalize()}
+    **Recommended Song:** {song_title}<br><br>
+    <iframe width="560" height="315" src="https://www.youtube.com/embed/{video_id}?autoplay=1" 
+    frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; 
+    picture-in-picture" allowfullscreen></iframe>
+    """
+    return html_output
+
+# Gradio UI
+gr.Interface(
+    fn=predict_mood_and_recommend_song,
+    inputs=gr.Image(type="pil", label="Upload an Image"),
+    outputs=gr.HTML(),
+    title="🖼️ Image Mood to Song Recommender",
+    description="Upload an image, and get a song recommendation based on the predicted mood of the image.",
+).launch(share=True)
